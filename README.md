@@ -38,5 +38,5 @@ python main.py
 
 ## Authors
 
-* **Johnny H. Esteves**[PurpleBooth](https://github.com/estevesjh)
+* **Johnny H. Esteves**  - *Initial work* - (https://github.com/estevesjh)
 
