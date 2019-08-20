@@ -3,6 +3,7 @@
 # Obs.: first activate ciao enviroment
 
 from astropy.io.fits import getdata
+import astropy.io.ascii as at
 from astropy.table import Table
 import numpy as np
 import logging
@@ -15,7 +16,11 @@ import logging
 def read_inputCat(catInFile, idx=None, colNames=None):
     logging.debug('Starting getCat.read_inputCat()')
 
-    h = getdata(catInFile)
+    try: ## get a fits file
+        h = getdata(catInFile)
+    except: ## get a csv table
+        h = at.read(catInFile,delimiter=',')
+
     d = Table(h) ## all data
     
     ## Take a sub-sample of index(idx)
@@ -33,12 +38,16 @@ def read_inputCat(catInFile, idx=None, colNames=None):
     ## remove white spaces
     for i in range(Ncat):
         obsids[i] = obsids[i].replace(" ","")
-
-    inputDataDict = {'ID':id,'obsids':obsids,
-    'RA':ra,'DEC':dec,
-    'redshift':z}
     
-    logging.debug('Returning from helperFunctions.read_afterburner()')
+    try:
+        for i in range(Ncat):
+            id[i] = id[i].replace(" ","")
+    except:
+        pass
+
+    inputDataDict = {'ID':id,'obsids':obsids,'RA':ra,'DEC':dec,'redshift':z}
+    
+    logging.debug('Returning from getCat.read_inputCat()')
 
     return inputDataDict
     

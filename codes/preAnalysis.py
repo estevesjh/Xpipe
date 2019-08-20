@@ -47,30 +47,58 @@ def writeStringToFile(fileName, toBeWritten):
         with open(fileName, 'a') as f:
             f.write( '{toBeWritten}\n'.format(toBeWritten=toBeWritten) )
 
-def saveOutput(name,value,section=None,out='output.txt'):
+def checkOutput(fileName,check):
+    checkName, checkValue = check.split(': ')
+
+    text = open(fileName,'r').read()
+    lines = text.split('\n')
+    
+    ## check if the value already exists
+    found = False
+    for line in lines:
+        nameValue = line.split(': ')
+        if len(nameValue)>1:
+            name, value = nameValue
+            if name==checkName:
+                found = True
+                old_nameValue = nameValue
+    
+    new_nameValue = check
+    if found:
+        ## Switch value
+        new_text = text.replace(old_nameValue,new_nameValue)
+        with open(fileName, 'w') as f:
+                f.write(new_text)
+    else:
+        with open(fileName, 'a') as f:
+            f.write( '{toBeWritten}\n'.format(toBeWritten=new_nameValue) )
+
+def saveOutput(names,values,out='output.txt'):
     '''Save an ouptut name value into a section in the output file
     '''
-    toBeWritten = '{item}: {value}'.format(item=name,value=value)
-
-    # create file if it does not exist
     if not os.path.isfile(out):
-        with open(out, 'w') as f:
-            f.write('#general ouput of the Xpipe \n')
-            if section is not None:
-                f.write('[%s]\n'%(section))
-            f.write(toBeWritten+'\n')
-    # else, append to file
+       new_data = Table()
+       for col,val in zip(names,values):
+           new_data[col] = [val]
     else:
-        with open(out, 'a') as f:
-            if section is not None:
-                f.write('[%s]\n'%(section))
-            writeStringToFile(out,toBeWritten)
+        new_data = Table.read(out,format='ascii',delimiter=',')
+        old_cols = new_data.colnames
+        
+        ## if columns does not exists
+        notCommonCols = [element for element in names if element in old_cols]
+        if len(notCommonCols)>0:
+            new_data.add_row(new_data[-1])
+            for col,val in zip(names,values):
+                new_data[col][-1] = val
+        else:
+            for col,val in zip(names,values):
+                new_data[col] = val
+    ## save
+    new_data.write(out,format='ascii',delimiter=',',overwrite=True)
 
-def doGRP(infile, Ncounts, x0, y0, region):
+def doGRP(infile, Ncounts, x0, y0):
     """Make groups of Ncounts in each bin
-    Make a region file.
     """
-
     rprof = pycrates.read_file(infile)
     r = pycrates.copy_colvals(rprof,"R")
     cnt = pycrates.copy_colvals(rprof,"COUNTS")
@@ -88,18 +116,14 @@ def doGRP(infile, Ncounts, x0, y0, region):
             inrad, outrad = np.append(inrad,r[lastidx,0]),np.append(outrad,r[i,1])
             outradii.append(i)
             lastidx = i
-    
-    logging.debug('doGRP(): threshold = {} cnts; Produced: {} bins'.format(Ncounts,len(outradii)) )
+    radii = [inrad,outrad]
+    return len(outradii), radii
 
-    lastidx = 0
+def saveGRP(r,x0,y0,region='group.reg'):
+    inrad, outrad = r
     with open(region, 'w') as fout:
         for i in range(1,len(outrad)):
-            # inrad = r[lastidx,0]
-            # outrad = r[i-1,1]+dr[lastidx]
             print('annulus(%.3f,%.3f,%.2f,%.2f)'%(x0,y0,inrad[i],outrad[i]),file=fout )
-            # lastidx = i
-    return len(outradii)
-
 ## -------------------------------
 ## auxiliary functions
 
@@ -144,7 +168,10 @@ def findCentroX(inimg,x0,y0,rphy):
         dmstat.punlearn()
         bla = dmstat(totog, centroid=True)
         pos = (dmstat.out_cntrd_phy)
-        pos = pos.split(',')
+        try:
+            pos = pos.split(',')
+        except:
+            pos = (x0+10), (y0+10)
         ## Definindo x e y
         x0, y0 = float(pos[0]), float(pos[1])
         conv = ((x-x0)**2+(y-y0)**2)**(1/2)
@@ -158,11 +185,12 @@ def findCentroX(inimg,x0,y0,rphy):
     return [x0, y0]
 
 def rprofile(img,bkg,expmap,region,out='rprof.fits',bgregion=None):
+    tmp = out.split('.fits')[0]+'_tmp.fits'
     if bgregion is None:
         bgregion = region
     dmextract.punlearn()
     dmextract.infile = img+"[bin sky=@%s]"%(region)
-    dmextract.outfile = "%s"%(out)
+    dmextract.outfile = "%s"%(tmp)
     dmextract.bkg = bkg+"[bin sky=@%s]"%(bgregion)
     dmextract.exp = expmap
     dmextract.bkgexp = expmap
@@ -170,11 +198,16 @@ def rprofile(img,bkg,expmap,region,out='rprof.fits',bgregion=None):
     dmextract.clob = 'yes'
     dmextract()
     
-    dmtcalc(out,out,expression='rmid=0.5*(r[0]+r[1])',clobber=True)
+    dmtcalc(tmp,out,expression='rmid=0.5*(r[0]+r[1])',clobber=True)
+    os.remove(tmp)
 
 def getObsid(obsid):
     lis = obsid.split(',')
-    res = [int(ij) for ij in lis]
+    try:
+        res = [int(float(ij)) for ij in lis]
+    except:
+        print('List Error:',lis)
+        res = [int(float(ij)) for ij in lis[:-1]]
     return res
 
 def checkDirs(dirList):
@@ -195,8 +228,11 @@ def checkObsid(obsid):
         res_lis = getObsid(obsid)
         return obsid,res_lis
 
-    elif isinstance(obsid,list):
-        res_str = ','.join(obsid)
+        if len(obsid) > 1:
+            res_str = ','.join(obsid)
+        else:
+            res_str = str(obsid)
+        
         return res_str,obsid
 
     elif isinstance(obsid,int):
@@ -206,7 +242,7 @@ def checkObsid(obsid):
     else:
         logging.error('Chandra obsid={} format is not valid! Please try the following formats: int, str or list'.format(obsid))
         pass
-        
+
 def checkEvtFiles(obsid_lis,pathData='./'):
     '''Check if the event files were created.
     '''
@@ -228,6 +264,7 @@ def getDir(name,path):
     nameDir = os.path.join(path,name)
     if not os.path.exists(nameDir):
         os.makedirs(nameDir)
+    nameDir = os.path.relpath(nameDir)
     return nameDir
 
 def makeProfile(img, xc, yc, rmax, binf):
@@ -252,10 +289,11 @@ def makeProfile(img, xc, yc, rmax, binf):
     return ctsums[:rmaxdiv], numpix[:rmaxdiv]
 
 def getRmax(xc,yc,img,emap,outdir,binf=1,aperMax=600):
-    ones = path.join(outdir,'ones.fits')
+    ones = path.join(outdir,'profile','ones.fits')
     ## Define files
-    dmimgcalc(img,'none',ones,op="imgout=(1+(img1-img1))",clobber=True)
-    dmimgthresh(ones,out=ones,exp=emap,cut=1,value=0,clobber=True)
+    if not path.isfile(ones):
+        dmimgcalc(img,'none',ones,op="imgout=(1+(img1-img1))",clobber=True)
+        dmimgthresh(ones,out=ones,exp=emap,cut=1,value=0,clobber=True)
 
     import astropy.io.fits as fits
     with fits.open(ones) as f:
@@ -332,7 +370,10 @@ def findRbkg(rprof_file,rmax=None):
         print('threshold:',dratio_threshold)
         idx, = np.where((dratio > dratio_threshold)&(ratio[:-1]<ratio_threshold))
         x = r[idx+1]
-        rbkg = x[0]
+        try:
+            rbkg = x[0]
+        except:
+            rbkg = r[-1]
     else:
         rbkg = r[-1]
     print('Background Radius:',rbkg)
@@ -377,7 +418,7 @@ def centerX(img,evt,z,radius=500,outdir='./'):
     x0, y0 = float(dmcoords.x), float(dmcoords.y)
 
     ## search the center in all FOV
-    xcen,ycen = findCentroX(img,x0,y0,450)
+    xcen,ycen = findCentroX(img,x0,y0,(150/0.492))
     
     ## find the center in a given aperture
     xcen,ycen = findCentroX(img,xcen,ycen,rphy)
@@ -389,15 +430,13 @@ def centerX(img,evt,z,radius=500,outdir='./'):
     Xra_peak, Xdec_peak = getCenter(img,[xpeak,ypeak],unitsInput='physical',units='deg')
     
     output = path.join(outdir,'log.txt')
-    if path.isfile(output):
-        os.remove(output)
-    
-    saveOutput('RADEC','{ra},{dec}'.format(ra=Xra,dec=Xdec),section='Center',out=output)
-    saveOutput('RADEC_PEAK','{ra},{dec}'.format(ra=Xra_peak,dec=Xdec_peak),out=output)
+    cols = ['RA','DEC','RA_PEAK','DEC_PEAK']
+    values = [Xra,Xdec,Xra_peak,Xdec_peak]
+    saveOutput(cols,values,out=output)
 
     return Xra, Xdec
 
-def radialProfile(img_mask,bg_img,emap,z,center,binf=1,outdir='./'):
+def radialProfile(img_mask,bg_img,emap,z,center,rbkg=None,rmax=None,binf=1,outdir='./'):
 
     logging.debug('Starting preAnalysis.radialProfile')
 
@@ -412,8 +451,9 @@ def radialProfile(img_mask,bg_img,emap,z,center,binf=1,outdir='./'):
     xcen, ycen = getCenter(img_mask,[Xra,Xdec],unitsInput='deg',units='physical')
     xc, yc = getCenter(img_mask,[Xra,Xdec],unitsInput='deg',units='image')
     
-    ## Find the maximum radius
-    rmax = getRmax(xc,yc,img_mask,emap,outdir,binf=binf,aperMax=aperMax)
+    if rmax is None:
+        ## Find the maximum radius
+        rmax = getRmax(xc,yc,img_mask,emap,outdir,binf=binf,aperMax=aperMax)
     
     rmax_anel = path.join(outdir,'check_rmax.reg')
     abertura(xcen,ycen,rmax,rmax_anel)
@@ -422,53 +462,67 @@ def radialProfile(img_mask,bg_img,emap,z,center,binf=1,outdir='./'):
     region = path.join(proDir,"rmax.reg")
     bgregion = path.join(proDir,"bkg.reg")
     grpRegion = region.split('.reg')[0]+'_grp.reg'
+    grpBkgRegion = region.split('.reg')[0]+'_grp_rbkg.reg'
 
     rprof_file1 = path.join(proDir,"broad_rprofile_1pix.fits")
     rprof_file = path.join(proDir,"broad_rprofile_binned.fits")
     rprof = path.join(proDir,"broad_rprofile_binned_cut.fits")
 
     dt = 1
-    # ## Computing binned radial profile
-    # anel(xcen,ycen,10,rmax,dt,grpRegion,mode='log')
-    # rprofile(img_mask,bg_img,emap,grpRegion,out=rprof_file,bgregion=grpRegion)
-    
     # The Radial Profile with Blank Fields
     if not path.isfile(rprof_file):
-        # create ring
-        anel(xcen,ycen,5,1.25*rmax,dt,region) 
+        anel(xcen,ycen,5,1*rmax+30,dt,region) 
         # compute radial profile
         rprofile(img_mask,bg_img,emap,region,out=rprof_file1,bgregion=region)
-        dmcopy(rprof_file1+'[rmid<%.2f]'%(rmax),rprof_file1,clobber=True)
+    
+    dmcopy(rprof_file1+'[rmid<%.2f]'%(rmax),rprof_file1,clobber=True)
 
     ## Do binning in number of counts
     ct_thresh = 2000
-    nbins = doGRP(rprof_file1,ct_thresh,xcen,ycen,grpRegion)
-    while nbins < 40:
-        ct_thresh = ct_thresh-25
-        nbins = doGRP(rprof_file1,ct_thresh,xcen,ycen,grpRegion)
+    nbins,radii = doGRP(rprof_file1,ct_thresh,xcen,ycen)
+    while nbins < 50:
+        ct_thresh -= 25
+        nbins,radii = doGRP(rprof_file1,ct_thresh,xcen,ycen)
+    
+    saveGRP(radii,xcen,ycen,region=grpRegion)
     rprofile(img_mask,bg_img,emap,grpRegion,out=rprof_file,bgregion=grpRegion)
     
     ## find backgound radius and compute SNR
-    rbkg = findRbkg(rprof_file,rmax=rmax)
-    SNR = SNR_obs(rprof_file,rbkg)
+    if rbkg is None:
+        rbkg = findRbkg(rprof_file,rmax=rmax)
+    SNRi = SNR_obs(rprof_file,rbkg)
     
     ## Scale the blank field counts at the source background
     dmcopy(rprof_file+'[rmid<=%.2f]'%(rbkg),rprof,clobber=True)
 
+    n_bins_inside_rbkg = np.count_nonzero(radii[0]<rbkg)
+    ct_thresh += 100
+    while n_bins_inside_rbkg < 45:
+        ct_thresh = ct_thresh-10
+        if ct_thresh<10:
+            break
+        nbins,radii = doGRP(rprof_file,ct_thresh,xcen,ycen)
+        n_bins_inside_rbkg = np.count_nonzero(radii[0]<rbkg)
+
+    saveGRP(radii,xcen,ycen,region=grpBkgRegion)
+    rprofile(img_mask,bg_img,emap,grpBkgRegion,out=rprof_file,bgregion=grpBkgRegion)
+
+    logging.debug('doGRP(): threshold = {} cnts; Produced: {} bins'.format(ct_thresh,nbins) )
+
     ## Define a background region
     anel(xcen,ycen,rbkg,rbkg+2*60/0.492+1,2*60/0.492-1,bgregion)
     
-    # logging.debug("Signal to noise ratio: {0}".format(SNR))
-    # logging.debug("Background radius: {0} arcsec".format(rbkg*0.492))
-    # logging.debug("Maximum radius: {0} arcsec".format(rmax*0.492))
+    logging.debug("Signal to noise ratio: {0}".format(SNRi))
+    logging.debug("Background radius: {0} arcsec".format(rbkg*0.492))
+    logging.debug("Maximum radius: {0} arcsec".format(rmax*0.492))
 
     output = path.join(outdir,'log.txt')
-    saveOutput('rbkgPhysical',rbkg,out=output)
-    saveOutput('rmaxPhysical',rmax,out=output)
-    saveOutput('SNR',SNR,out=output)
-    saveOutput('countsThreshold',ct_thresh,out=output)
 
-    print('check: \n rbkg, rmax = {}, {} \n SNR = {}'.format(rbkg,rmax,SNR))
+    cols = ['rbkgPhysical','rmaxPhysical','SNR','countsThreshold']
+    values = [round(rbkg,1),round(rmax,1),round(SNRi,2),ct_thresh]
+    saveOutput(cols,values,out=output)
+
+    print('check: \n rbkg, rmax = {}, {} \n SNR = {}'.format(rbkg,rmax,SNRi))
 
 def doArfRmf(evt_region,outroot):
     specextract.punlearn()
@@ -495,7 +549,8 @@ def arf_rmf(obsid,center,z,radius=1500,outdir='./',downPath='./'):
     Xra, Xdec = center
     rphy = kpcToPhy(radius,z) ## 1500 kpc in physical units (default)
 
-    s = [os.path.join(downPath,'{}'.format(obsid),'repro',"%s_source.reg"%(obsid))  for obsid in obsid_lis]
+    # s = [os.path.join(downPath,'{}'.format(obsid),'repro',"%s_source.reg"%(obsid))  for obsid in obsid_lis]
+    s = [os.path.join(downPath,'{}'.format(obsid),'repro',"%s.reg"%(obsid))  for obsid in obsid_lis]
     evt_gti_lis = [os.path.join(downPath,'{}'.format(obsid),'repro',"{}_evt_gti.fits".format(obsid)) for obsid in obsid_lis]
     
     for i in range(nObs):

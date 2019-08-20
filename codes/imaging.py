@@ -56,7 +56,7 @@ def psfmap(imgfilename_lis,emapfilname_lis,method='expweight',outdir='./'):
             subprocess.run(['dmimgcalc','infile='+psf_str+','+emaplist,'infile2=none','outfile='+outPSF,'op=imgout=%s'%(op),'verbose=0','clob+'])
     else:
         pass
-    subprocess.run(['dmhedit',outPSF,'file=','op=add','key=BUNIT','value="arcsec"','verbose=0'])
+    subprocess.run(['dmhedit',outPSF,'file=','op=add','key=BUNIT','value="arcsec"','verbose=0','clob+'])
 
 def ps_merge(obsid_lis,out,energy_low=0.5,energy_high=2.,method='expweight',dirname='./'):
     ### 
@@ -64,11 +64,11 @@ def ps_merge(obsid_lis,out,energy_low=0.5,energy_high=2.,method='expweight',dirn
     input: *_thresh.img','*_thresh.expmap',
     method: expweight; min
     '''
-    # currentPath = os.getcwd()
-    # os.chdir(dirname)
+    currentPath = os.getcwd()
+    os.chdir(dirname)
     
     ## Creating the psf map
-    outNamePrefix = path.join(dirname,'img','sb_')
+    outNamePrefix = path.join(dirname,'sb_')
     imgfile = [outNamePrefix+'{0}_{1}-{2}_thresh.img'.format(obsid,energy_low,energy_high) for obsid in obsid_lis]
     expfile = [imgfile[i].split('.img')[0]+'.expmap' for i in range(len(obsid_lis))]
     
@@ -101,7 +101,12 @@ def ps_merge(obsid_lis,out,energy_low=0.5,energy_high=2.,method='expweight',dirn
     dmcopy(raw_ps+"[PSFRATIO < 1.5, SRC_SIGNIFICANCE > 3]",ps,clobber="True")
     dmcopy(raw_ps+"[PSFRATIO > 1.5, SRC_SIGNIFICANCE > 3]",ext,clobber="True")
 
+    os.chdir(currentPath)
+
 def ps_single(img,expfile,out,dirname='./'):
+    currentPath = os.getcwd()
+    os.chdir(dirname)
+
     ## Creating the psf map
     psffile = img.split('.img')[0]+'.psfmap'
 
@@ -131,31 +136,33 @@ def ps_single(img,expfile,out,dirname='./'):
     dmcopy(raw_ps+"[PSFRATIO < 1.5, SRC_SIGNIFICANCE > 3]",ps,clobber="True")
     dmcopy(raw_ps+"[PSFRATIO > 1.5, SRC_SIGNIFICANCE > 3]",ext,clobber="True")
 
-def blank_field_image(obsid,evt,img,outdir='./'):
+    os.chdir(currentPath)
+
+def blank_field_image(obsid,evt,img,outdir='./',clobber=False):
     blkevt = path.join(outdir,"{}_blank.evt".format(obsid))
     bg_img = path.join(outdir,"{}_blank_particle_bgnd.img".format(obsid))
 
-    if not path.exists(blkevt):
+    if (not path.exists(blkevt)) or clobber:
         blanksky.punlearn()
         blanksky.evtfile = evt
         blanksky.outfile = blkevt
-        blanksky(verbose=0,clobber=True)
+        blanksky(verbose=0)
     
-    if not path.isfile(bg_img):
+    if not path.isfile(bg_img) or clobber:
         blanksky_image.bkgfile = blkevt
         blanksky_image.outroot = blkevt.split('.evt')[0]
         blanksky_image.imgfile = img
         blanksky_image()
 
-def merge_blank_image(img_lis,emap_lis,out_img):
+def merge_blank_image(img_lis,emap_lis,out_img,clobber=False):
     img_str = ','.join(img_lis); emap_str = ','.join(emap_lis)
     nobs = len(img_lis)
-    if not path.isfile(out_img):
+    if (not path.isfile(out_img)) or clobber:
         enu = ['(img%i*img%i)'%(i,i+nobs) for i in range(1,nobs+1)]
         div = ['img%i'%(i+nobs) for i in range(1,nobs+1)]
         op = '('+'+'.join(enu)+')/('+'+'.join(div)+')'
         inlist = img_str+','+emap_str
-        dmimgcalc(infile=inlist,infile2='none',outfile=out_img,op='imgout=%s'%(op),clobber=True)
+        dmimgcalc(infile=inlist,infile2='none',outfile=out_img,op='imgout=%s'%(op),clobber=clobber)
 
 def ccd_single(obsid,root):
     """ Find the ccd chips used in the observation (single mode)
@@ -235,7 +242,11 @@ def checkObsid(obsid):
         return obsid,res_lis
 
     elif isinstance(obsid,list):
-        res_str = ','.join(obsid)
+        if len(obsid) > 1:
+            res_str = ','.join(obsid)
+        else:
+            res_str = str(obsid)
+        
         return res_str,obsid
 
     elif isinstance(obsid,int):
@@ -250,12 +261,13 @@ def checkEvtFiles(obsid_lis,pathData='./'):
     '''Check if the event files were created.
     '''
     event_file_lis = [ path.join(pathData,"%i"%(obsid),"repro","acisf%05i_repro_evt2.fits"%(obsid)) for obsid in obsid_lis]
-    idx = checkDirs(event_file_lis)
-    if idx.size < len(obsid_lis):
-        logging.critical('repro files was not created. Please remove the files {} and run the code again.'.format(','.join(obsid_lis)))
-        exit()
-    else:
-        pass
+    # idx = checkDirs(event_file_lis)
+    for (obs,evt) in zip(obsid_lis,event_file_lis):
+        if not path.isfile(evt):
+            logging.critical('event file was not created {}.'.format(evt))
+            exit()
+        else:
+            pass
 
 def checkImg(img):
     if not path.isfile(img):
@@ -290,6 +302,7 @@ def fluxImage(obsid,blankField=True,energy='0.7:2:1.5',binsize=2,pathData='./',o
     sb_img = outNamePrefix+'{0}-{1}_thresh.img'.format(elo,ehi)
     sb_img_lis = [outNamePrefix+'{0}_{1}-{2}_thresh.img'.format(obsid,elo,ehi) for obsid in obsid_lis]
     exp_lis = [sb_img_lis[i].split('.img')[0]+'.expmap' for i in range(nObs)]
+    count_img = path.join(outdir,'sb_thresh.img'); emap = path.join(outdir,'sb_thresh.expmap')
     
     # do fluxImage
     checkImgFile = not path.isfile(sb_img)
@@ -298,23 +311,25 @@ def fluxImage(obsid,blankField=True,energy='0.7:2:1.5',binsize=2,pathData='./',o
         evt2_lis = evt2_str.split(', ')
         
         if checkImgFile or clobber: # check image file
-            merge_obs(evt2_str,outNamePrefix,band=energy,binsize=binsize,clobber=True, units='time')
+            merge_obs(evt2_str,outNamePrefix,band=energy,binsize=binsize,clobber=clobber, units='time')
     
     else: ## Single observation
         evt2_str = ccd_single(obsid_lis[0],pathData)
         
         if checkImgFile or clobber: # check image file
-            fluximage(evt2_str,outNamePrefix,band=energy,binsize=binsize,clobber=True,units='time')
+            fluximage(evt2_str,outNamePrefix,band=energy,binsize=binsize,clobber=clobber,units='time')
 
-    # output images name
-    count_img = path.join(outdir,'sb_thresh.img'); emap = path.join(outdir,'sb_thresh.expmap')
-    ## copy the files
-    dmcopy(sb_img,count_img,clobber=True); dmcopy(sb_img.split('.img')[0]+'.expmap',emap,clobber=True)
-
+    if (not path.isfile(count_img)) or clobber:    
+        ## copy the files
+        dmcopy(sb_img,count_img,clobber=True)
+        dmcopy(sb_img.split('.img')[0]+'.expmap',emap,clobber=True)
+        
+    ###############
     # end fluxImage
     
     # start blankField
     if blankField:
+        ### http://cxc.harvard.edu/ciao/threads/acisbackground/
         logging.debug('Starting imaging.blankField(%s)'%(obsid_str))
 
         # Define output name
@@ -329,25 +344,31 @@ def fluxImage(obsid,blankField=True,energy='0.7:2:1.5',binsize=2,pathData='./',o
             
             if nObs>1: ## Multiple observations
                 for i in range(nObs):
-                    blank_field_image(obsid_lis[i],evt2_lis[i],sb_img_lis[i],outdir=imgDir)
-                merge_blank_image(bg_img_lis,exp_lis,bg_img) ## join blank image
+                    blank_field_image(obsid_lis[i],evt2_lis[i],sb_img_lis[i],outdir=imgDir,clobber=clobber)
+                merge_blank_image(bg_img_lis,exp_lis,bg_img,clobber=clobber) ## join blank image
             
             else: ## Single observation
                 blank_field_image(obsid_lis[0],evt2_str,sb_img,outdir=imgDir)
-                dmcopy(bg_img_lis[0],bg_img,clobber=True)
+                dmcopy(bg_img_lis[0],bg_img,clobber=clobber)
+    ################
     # end blankField
+    pass
 
 def pointSources(obsid,name,energy_low=0.5,energy_high=2.,outdir='./',clobber=False):
+    ### http://cxc.harvard.edu/ciao/threads/wavdetect/
+    ### http://cxc.harvard.edu/ciao/threads/wavdetect_merged/
+
     currentPath = os.getcwd()
-    
+    outdir = path.abspath(outdir)
     imgDir = getDir('img',outdir)
+    
     # check the OBSID input
     obsid_str, obsid_lis = checkObsid(obsid)
     nObs = len(obsid_lis)
     
     logging.debug('Starting imaging.pointSources(%s)'%(obsid_str))
 
-    img = path.join(outdir,'sb_thresh.img')
+    img = path.join(outdir,'img','sb_{0}-{1}_thresh.img'.format(energy_low,energy_high))
     expmap = img.split('.img')[0]+'.expmap' 
     psreg = path.join(outdir,"ps.reg")      #output
 
@@ -359,9 +380,8 @@ def pointSources(obsid,name,energy_low=0.5,energy_high=2.,outdir='./',clobber=Fa
         else:
             ps_single(img,expmap,psreg,dirname=imgDir)
 
-    # os.chdir(currentPath)   
     # Create Snapshots Image: check the point sources
-    checkImage(img,name,psreg,imgDir=imgDir,outdir=currentPath)
+    checkImage(img,name,psreg,imgDir=outdir,outdir=currentPath)
 
 def checkImage(img,name,psreg,imgDir='./',outdir='./'):
     
@@ -372,9 +392,11 @@ def checkImage(img,name,psreg,imgDir='./',outdir='./'):
     simg = path.join(imgDir,'smooth.img')
     
     if not os.path.exists(simg):
-        csmooth(img,outfile=simg,outsig=simg.split('.img')[0]+'sig.img', outscl=simg.split('.img')[0]+'scl.img',sigmin=3, sigmax=5, sclmax=35, clobber=True)
+        aconvolve(img,simg,'lib:gaus(2,5,1,%.2f,%.2f)'%(10,10),method="fft",clobber=True)
+        # csmooth(img,outfile=simg,outsig=simg.split('.img')[0]+'sig.img', outscl=simg.split('.img')[0]+'scl.img',sigmin=3, sigmax=5, sclmax=35, clobber=True)
+        # dmimgadapt(img,outfile=simg, min=1, max=45, num=15, radscal="log", fun="gaus", counts=100, clobber=True)
     
-    subprocess.run(['dmimg2jpg','infile=%s'%(simg),'outfile=%s'%(jpgimg),"lutfile=)ximage_lut.blue4","regionfile=region(%s)"%(psreg),"regioncolor=)colors.yellow","scalefun=log","showgrid=yes","mode=h",'clob+'])
+    subprocess.run(['dmimg2jpg','infile=%s'%(simg),'outfile=%s'%(jpgimg),"lutfile=)ximage_lut.blue4","regionfile=region(%s)"%(psreg),"regioncolor=)colors.yellow","scalefun=log","mode=h",'clob+'])
 
 if __name__ == '__main__':
     print('imaging.py')

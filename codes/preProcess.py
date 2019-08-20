@@ -30,7 +30,7 @@ def doFlare(evt,obsid,root='./',method='sigma'):
     dmextract(bla+"[bin time=::259.28]",lc,opt="ltc1",clobber=True)
 
     deflare.punlearn()
-    deflare(lc,lcgti,method=method)
+    deflare(lc,lcgti,method=method,nsigma=1.8)
     # subprocess.run(['punlearn','deflare'])
     # subprocess.run(['deflare',lc,lcgti,'method='+method])
     
@@ -69,7 +69,11 @@ def checkObsid(obsid):
         return obsid,res_lis
 
     elif isinstance(obsid,list):
-        res_str = ','.join(obsid)
+        if len(obsid) > 1:
+            res_str = ','.join(obsid)
+        else:
+            res_str = str(obsid)
+        
         return res_str,obsid
 
     elif isinstance(obsid,int):
@@ -129,21 +133,22 @@ def repro(obsid,path='./',clobber=False):
     # idx = checkFiles(event_file_lis)
     # if (idx.size < nObs) or clobber:
     for (evt,obs) in zip(event_file_lis,obsid_lis):
-        try:
+        if not os.path.isfile(evt):
+            # try:
             chandra_repro(obs,'')
-        except:
-            if not os.path.isfile(evt):
-                try:
-                    obsPath=os.path.join(path,'{}'.format(obs))
-                    os.removedirs(obsPath)
-                    down(obs,path=path,clobber=True)
-                    chandra_repro(obs,'')
-                # print('repro files was not created. Please remove the file {} and run the code again.'.format(obs))
-                except:
-                    logging.critical('repro files was not created. Please remove the files {} and run the code again.'.format(obs))
-                    exit()
-            else:
-                logging.warning('{}/repro files already exists'.format(obs))
+            # except:
+            #     try:
+            #         obsPath=os.path.join(path,'{}'.format(obs))
+            #         os.removedirs(obsPath)
+            #         down(obs,path=path,clobber=True)
+            #         chandra_repro(obs,'')
+            #     # print('repro files was not created. Please remove the file {} and run the code again.'.format(obs))
+            #     except:
+            #         logging.critical('repro files was not created. Please remove the files {} and run the code again.'.format(obs))
+            #         exit()
+        else:
+            logging.warning('{}/repro files already exists'.format(obs))
+    
     os.chdir(currentPath)
 
 ## -------------------------------
@@ -165,16 +170,15 @@ def flare(obsid,path='./',clobber=False,method='sigma'):
     idx = checkDirs(event_file_lis)
     if idx.size < nObs:
         mask = np.in1d(np.array(obsid_lis),np.array(obsid_lis)[idx],invert=True)
-        # logging.error('{}: event files does not exists'.format(','.join(event_file_lis[mask])) )
+        logging.error('{}: event files does not exists')
 
     # check the repro files
-    idx = checkDirs(evt_gti_lis)
-    if idx.size < nObs or clobber:
-        for i in range(nObs):
+    for i in range(nObs):
+        try:
             doFlare(event_file_lis[i],obsid_lis[i],root=repro_lis[i],method='sigma')
-    # else:
-    #     logging.critical('repro files was not created. Please remove the files {} and run the code again.'.format(obsid))
-    #     exit()
+        except:
+            logging.critical('repro files was not created. Please remove the files {} and run the code again.'.format(obsid_lis[i]))
+            exit()
     
 if __name__ == '__main__':
     print('pre-process.py')

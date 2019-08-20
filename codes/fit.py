@@ -84,13 +84,17 @@ F1vec = np.vectorize(F1)
 ## Fit SB profile
 npne = lambda r,rc,rs,a,b,e,g,n0: (n0**2)*( (r/rc)**(-a) )*( ( 1+(r/rs)**g )**(-e/g) ) /(1+(r/rc)**2)**(3*b-a/2)
 argS = lambda r,R,rc,rs,a,b,e,g,n0: 2*npne(r,rc,rs,a,b,e,g,n0)*r/np.sqrt(r**2 - R**2)
-def S(x,rc,rs,a,b,e,g,n0):
+def S(x,rc,rs,a,b,e,g):
     out=[]
     for R in x: 
-        aux=quad(argS,R,np.inf,args=(R,rc,rs,a,b,e,g,n0),epsabs=1e-9,limit=250,epsrel=1.49e-6,full_output=1)
+        aux=quad(argS,R,np.inf,args=(R,rc,rs,a,b,e,g,1.),epsabs=1e-9,limit=250,epsrel=1.49e-6,full_output=1)
         out.append(aux[0])
-    return np.array(out)
-S_bkg = lambda R,rc,rs,a,b,e,g,n0,bkg: S(R,rc,rs,a,b,e,g,n0)+bkg
+    ## normalize
+    out = np.array(out)
+    out = out/out.max()
+    return out
+    
+S_bkg = lambda R,rc,rs,a,b,e,g,n0,bkg: n0*S(R,rc,rs,a,b,e,g)+bkg
 
 ## arg: Emission measure integral
 argnpneSquare = lambda x,rc,rs,a,b,e,g,n0: 4*np.pi*(npne(x,rc,rs,a,b,e,g,n0))*x**2
@@ -113,7 +117,7 @@ def EI(r,pars,phy2cm,model='modBeta'):
 
 ## Gas Mass Estimation
 mu = 1.17
-ne = lambda r,rc,rs,a,b,e,g,n0: np.sqrt(mu)*(n0)*( (r/rc)**(-a/2) )*( (1+(r/rs)**(g)) )**(-e/(2*g))/(1+(r/rc)**2)**((3*b-a/2)/2)
+ne = lambda r,rc,rs,a,b,e,g,n0: (n0/np.sqrt(mu))*( (r/rc)**(-a/2) )*( (1+(r/rs)**(g)) )**(-e/(2*g))/(1+(r/rc)**2)**((3*b-a/2)/2)
 argnpne = lambda x,rc,rs,a,b,e,g,n0: 4*np.pi*ne(x,rc,rs,a,b,e,g,n0)*x**2
 
 #--- Massa do Gás em função do raio
@@ -135,7 +139,7 @@ def Mgas(r,pars,n0,phy2cm,model='modBeta'):
 
 def S_bkg2(pars,R):
     (rc,rs,a,b,e,g,n0,bkg) = pars
-    return S(R,rc,rs,a,b,e,g,n0)+bkg
+    return n0*S(R,rc,rs,a,b,e,g)+bkg
 
 def SBeta(r,rc,beta,S0):
     res = S0/(1+(r/rc)**2)**(3*beta-1/2)
@@ -143,14 +147,18 @@ def SBeta(r,rc,beta,S0):
 
 def fitBeta(table):
     # dirname = os.path.dirname(table)
-    load_data(1,table, 3, ["RMID","CEL_BRI","CEL_BRI_ERR"])
+    load_data(1,table, 3, ["RMID","SUR_BRI","SUR_BRI_ERR"])
     set_source("beta1d.sbr1")
+    
     sbr1.r0 = 105
-    sbr1.beta = 4
+    sbr1.beta = 1
     sbr1.ampl = 0.00993448
+    
     freeze(sbr1.xpos)
+
     set_source("const1d.bkg")
     bkg.c0 = 0.01
+
     set_model(sbr1+bkg)
     fit()
     fitr = get_fit_results()
@@ -164,36 +172,13 @@ def fitBeta(table):
     # clear_plot()
     return out
 
-def fitmodBeta(infile,par0=None):
-    rprof = read_file(infile)
-    r_med = copy_colvals(rprof,"RMID")
-    s_obs = copy_colvals(rprof,"CEL_BRI")
-    s_obs_err = copy_colvals(rprof,"CEL_BRI_ERR")
-    
-    if par0 is None:    
-        rc0,rs0,a0,b0,e0,g0,n0_0,bkg0 = 90,450,0.65,0.7,2.5,3.,0.12,0.003
-        par0 = [rc0,rs0,a0,b0,e0,g0,n0_0,bkg0]
-        
-    elo = 1e-5
-    ## g eh fixo - outros parametros sao ajustados
-    Bound = ((elo,elo,elo,1/6,elo,3-elo,0.,0.),
-            (np.infty,np.infty,3,2, 5, 3+elo,np.infty,1.))
-
-    ## ajuste
-    params, params_cov = curve_fit(S_bkg, r_med, s_obs, sigma=s_obs_err,p0=par0,bounds=Bound)
-    
-    ## ajuste
-    params, params_cov = curve_fit(S_bkg, r_med, s_obs, sigma=s_obs_err,p0=par0,bounds=Bound,)
-
-    return params
-
 # with open(fileName, 'w') as f:
 #     f.write( '#r,S,Serr \n')
 #     for i in range(len(r_med)):
 #         f.write('{r},{s:.5f},{serr:.5f}\n'.format(r=r_med[i],s=s_obs[i],serr=s_obs_err[i]))
 
 def dofitBetaM(table,par0=None,parfrozen=None, chisqr=False):
-    load_data(1,table, 3, ["RMID","CEL_BRI","CEL_BRI_ERR"])
+    load_data(1,table, 3, ["RMID","SUR_BRI","SUR_BRI_ERR"])
     pars = ["rc","rs","alpha","beta","epsilon","gamma",'n0',"bkg"]
     load_user_model(S_bkg2,"mybeta")
 
@@ -208,9 +193,9 @@ def dofitBetaM(table,par0=None,parfrozen=None, chisqr=False):
     set_model("mybeta")
 
     var = 1e-6
-    mybeta.bkg.min = 0
-    mybeta.rc.min = 0
-    mybeta.rs.min = 0
+    mybeta.bkg.min = -1.
+    mybeta.rc.min = var
+    mybeta.rs.min = var
     mybeta.alpha.min = 0.
     mybeta.beta.min = var
     mybeta.gamma.min = 3-var
@@ -218,8 +203,8 @@ def dofitBetaM(table,par0=None,parfrozen=None, chisqr=False):
 
     mybeta.rc.max = 1e3
     mybeta.rs.max = 1e6
-    mybeta.alpha.max = 3-var
-    mybeta.beta.max = 2
+    mybeta.alpha.max = 5-var
+    mybeta.beta.max = 3
     mybeta.gamma.max = 3+var
     mybeta.epsilon.max = 5
     mybeta.n0.min = 0
@@ -227,6 +212,7 @@ def dofitBetaM(table,par0=None,parfrozen=None, chisqr=False):
     # freeze(mybeta.alpha)
     try:
         show_model()
+        # set_iter_method("primini")
         fit()
         fitr = get_fit_results()
         out = fitr.parvals
@@ -253,21 +239,26 @@ def fitBetaM(table,par0=None):
     if par0 is None:
         rc0,beta0,n0,bkg0,chisqr0 = fitBeta(table)
         rs0,alpha0,epsilon0,gamma0,bkg0 = 1000,0.,0.,3.,1e-4
-        par0 = [rc0,rs0,alpha0,beta0,epsilon0,gamma0,n0,bkg0]
+        par1 = [rc0,rs0,alpha0,beta0,epsilon0,gamma0,n0,bkg0]
+    else:
+        rc0,rs0,alpha0,beta0,epsilon0,gamma0,n0,bkg0 = par0
     
     Npar = 8
     # # ## First: Fit a beta model
-    frzpar=[False]+[True]+[True]+[False]+[True]+[True]+[False]+[True]
-    outp1 = dofitBetaM(table,par0=par0,parfrozen=frzpar,chisqr=True)
+    par1 = [rc0,rs0,0.,beta0,0.,gamma0,n0,bkg0]
+    frzpar=[False]+[True]+[True]+[False]+[True]+[True]+[False]+[False]
+    outp1 = dofitBetaM(table,par0=par1,parfrozen=frzpar,chisqr=True)
     par1_lis = [outp1[i] for i in range(Npar)]
 
     ## Second: Fit a power law(cusp) + beta Model
-    frzpar=[False]+[True]+[False]+[False]+[True]+[True]+[False]+[True]
+    par1_lis[2] = alpha0
+    frzpar=[False]+[True]+[False]+[False]+[True]+[True]+[False]+[False]
     outp2 = dofitBetaM(table,par0=par1_lis,parfrozen=frzpar,chisqr=True)
     par2_lis = [outp2[i] for i in range(Npar)]
 
     ## The final final: beta model modified
-    frzpar=[False]+[False]+[False]+[False]+[False]+[True]+[False]+[True]
+    par2_lis[4] = epsilon0
+    frzpar=[False]+[False]+[False]+[False]+[False]+[True]+[False]+[False]
     outp3 = dofitBetaM(table,par0=par2_lis,parfrozen=frzpar,chisqr=True)
 
     outvec = np.array([outp1,outp2,outp3])
@@ -280,3 +271,107 @@ def fitBetaM(table,par0=None):
 def SB(x,n0,rc,beta):
     y = n0*(1+(x/rc)**2)**(0.5-3*beta)
     return y
+
+
+# def chi2red(obs,exp,par_model, obs_err):
+#   chi_vet=[]
+#   soma=0
+#   for i in range(len(obs)):
+#     aux=((((obs[i]-exp[i])**2))/(obs_err[i]**2))
+#     soma = soma+aux
+#     chi_vet.append(aux)
+
+#   chi=np.sum(soma)
+#   num=(len(obs)) - par_model
+#   chired=chi/num
+#   return [chired, chi_vet]
+
+# def fitmodBeta(infile,par0=None):
+#     rprof = read_file(infile)
+#     r_med = copy_colvals(rprof,"RMID")
+#     S_obs = copy_colvals(rprof,"SUR_BRI")
+#     S_obsEr = copy_colvals(rprof,"SUR_BRI_ERR")
+    
+#     if par0 is None:    
+#         rc0,rs0,a0,b0,e0,g0,sig0,bkg0 = 90,450,0.65,0.7,2.5,3.,0.12,0.003
+#         par0 = [rc0,rs0,a0,b0,e0,g0,sig0,bkg0]
+
+#     cte=0.00000001
+#     var=0.00000001
+
+#     params, params_cov=curve_fit(S_bkg, r_med, S_obs, sigma=S_obsEr, p0=[rc0,rs0,a0,b0,e0,g0,sig0,bkg0],\
+#     bounds=((var,rs0-var,a0-var,0.3,e0-var,g0+var,0.,bkg0-var),\
+#            (np.infty,rs0+var,a0+var,2.,e0+var,g0-var,np.infty,bkg0+var)) )
+
+#     sig0=params[6]
+#     rc=params[0]
+#     beta=params[3]
+
+#     # agora solto alpha
+#     params, params_cov=curve_fit(S_bkg, r_med, S_obs, sigma=S_obsEr, p0=[rc,rs0,a0,beta,e0,g0,sig0,bkg0],\
+#     bounds=((var,rs0-var,var,0.3,e0-var,g0+var,0.,bkg0-var),\
+#            (np.infty,rs0+var,3.,2.,e0+var,g0-var,np.infty,bkg0+var)) )
+
+#     sig0=params[6]
+#     rc=params[0]
+#     beta=params[3]
+#     alpha=params[2]
+
+#     #agora solta rs e eps
+#     params, params_cov=curve_fit(S_bkg, r_med, S_obs, sigma=S_obsEr, p0=[rc,rs0,alpha,beta,e0,g0,sig0,bkg0],\
+#     bounds=((var,var,var,0.3,var,g0+var,0.,bkg0-var),\
+#            (np.infty,np.infty,3.,2.,5.,g0-var,np.infty,bkg0+var)) )
+
+#     sig0=params[6]
+#     rc=params[0]
+#     beta=params[3]
+#     alpha=params[2]
+#     rs=params[1]
+#     eps=params[4]
+
+#     # solta cte
+#     params, params_cov=curve_fit(S_bkg, r_med, S_obs, sigma=S_obsEr, p0=[rc,rs,alpha,beta,eps,g0,sig0,bkg0],\
+#     bounds=((var,var,var,0.3,var,g0+var,0.,0.),\
+#            (np.infty,np.infty,3.,2.,5.,g0-var,np.infty,np.infty)) )
+
+#     sig0=params[0]
+#     rc=params[1]
+#     rs=params[2]
+#     beta=params[3]
+#     gamma=params[4]
+#     eps=params[5]
+#     alpha=params[6]
+#     cte=params[7]
+
+#     #refaz
+#     params, params_cov=curve_fit(S_bkg, r_med, S_obs, sigma=S_obsEr, p0=[rc,rs,alpha,beta,eps,g0,sig0,cte],\
+#     bounds=((var,var,var,0.3,var,g0+var,0.,0.),\
+#            (np.infty,np.infty,3.,2.,5.,g0-var,np.infty,np.infty)) )
+
+#     sig0_bri=params[6]
+#     rc_bri=params[0]
+#     rs_bri=params[1]
+#     beta_bri=params[3]
+#     alpha_bri=params[2]
+#     eps_bri=params[4]
+#     gamma_bri=params[5]
+#     bkg_bri=params[7]
+
+#     sig0_bri_sd=np.sqrt(params_cov[6][6])
+#     rc_bri_sd=np.sqrt(params_cov[0][0])
+#     rs_bri_sd=np.sqrt(params_cov[1][1])
+#     beta_bri_sd=np.sqrt(params_cov[3][3])
+#     alpha_bri_sd=np.sqrt(params_cov[2][2])
+#     eps_bri_sd=np.sqrt(params_cov[4][4])
+#     gamma_bri_sd=np.sqrt(params_cov[5][5])
+#     bkg_bri_sd=np.sqrt(params_cov[7][7])
+
+
+#     S_opt=S_bkg(r_med,sig0_bri,rc_bri,rs_bri,beta_bri,alpha_bri,eps_bri,gamma_bri,bkg_bri)
+
+#     chired_S,chivet_S=chi2red(S_obs,S_opt,8,S_obsEr)
+#     resid_S=S_opt-S_obs
+
+#     outpar = [rc_bri,rs_bri,alpha_bri,beta_bri,eps_bri,gamma_bri,sig0_bri,bkg_bri,chired_S]
+#     return outpar
+
