@@ -17,6 +17,8 @@ Further, the CIAO package comes from with its own python dependencies and direct
 * [Astropy](https://www.astropy.org) - It's used to manage the fits tables
 * [ConfigParser] 
 
+To install the depedencies, take a look at (https://cxc.harvard.edu/ciao/scripting/#install)
+
 ### Setup the code
 
 The script is config file base. In order to run the code, setup the `./Xpipe_Config.ini` file. 
@@ -33,7 +35,7 @@ If `[parallel]`, you might choose the number of cores and the number of jobs per
 After all the steps above, you just run:
 
 ```
-python main.py
+python codes/main.py
 ```
 
 ## Authors
