@@ -346,12 +346,14 @@ def doAnalysis(names,list_obsids,redshift,idx=np.array([0,1],dtype=int)):
 		
 		#files
 		profile = os.path.join(outObjectPath,"profile","broad_rprofile_binned.fits")
-		count_img = os.path.join(outObjectPath,'sb_{}-{}_thresh.img'.format(elo,ehi))
-		# count_img = os.path.join(outObjectPath,'sb_thresh.img')
+		count_img = os.path.join(outObjectPath,'sb_thresh.img')
 		ps = os.path.join(outObjectPath,'ps.reg')
+		# count_img = os.path.join(outObjectPath,'sb_{}-{}_thresh.img'.format(elo,ehi))
+		
 
 		betaFile = os.path.join(outObjectPath,model+'.txt')
-		if os.path.isfile(betaFile):
+		clobber = False
+		if (os.path.isfile(betaFile)) & (not clobber):
 			betavec = np.loadtxt(betaFile)
 			try:
 				betapars = betavec[-1,:]
@@ -374,9 +376,8 @@ def doAnalysis(names,list_obsids,redshift,idx=np.array([0,1],dtype=int)):
 			csb = getOutput("csb",outFile=outputFile)
 
 		w = getOutput("w",outFile=outputFile)
-		# if centroidShift & (w<1):
-			# if w<0:
-		if centroidShift:
+		if centroidShift & (w<0):
+			print('centroidShift(%s)'%(obsid))
 			w,werr = Analysis.centroidShift(count_img,center_peak,r500,rmaxPhysical,z,outdir=outObjectPath)
 		else:
 			w = getOutput("w",outFile=outputFile)
@@ -384,6 +385,7 @@ def doAnalysis(names,list_obsids,redshift,idx=np.array([0,1],dtype=int)):
 			
 		errX = getOutput("errorCenter",outFile=outputFile)
 		if errorCenterX & (errX<0):
+			print('errorCenter(%s)'%(obsid))
 			Xra, Xdec, errX, Xra_peak, Xdec_peak = Analysis.errorCenterX(count_img,center,ps,z,radius=r500,outdir=outObjectPath)
 		else:
 			center_peak = getCenter(outputFile,peak=True)

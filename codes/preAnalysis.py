@@ -123,7 +123,7 @@ def saveGRP(r,x0,y0,region='group.reg'):
     inrad, outrad = r
     with open(region, 'w') as fout:
         for i in range(1,len(outrad)):
-            print('annulus(%.3f,%.3f,%.2f,%.2f)'%(x0,y0,inrad[i],outrad[i]),file=fout )
+            print('annulus(%.3f,%.3f,%.2f,%.2f)'%(x0,y0,inrad[i],outrad[i]),file=fout)
 ## -------------------------------
 ## auxiliary functions
 
@@ -497,7 +497,7 @@ def radialProfile(img_mask,bg_img,emap,z,center,rbkg=None,rmax=None,binf=1,outdi
 
     n_bins_inside_rbkg = np.count_nonzero(radii[0]<rbkg)
     ct_thresh += 100
-    while n_bins_inside_rbkg < 45:
+    while n_bins_inside_rbkg < 30:
         ct_thresh = ct_thresh-10
         if ct_thresh<10:
             break

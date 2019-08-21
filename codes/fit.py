@@ -208,6 +208,7 @@ def dofitBetaM(table,par0=None,parfrozen=None, chisqr=False):
     mybeta.gamma.max = 3+var
     mybeta.epsilon.max = 5
     mybeta.n0.min = 0
+    mybeta.bkg.min = -var
 
     # freeze(mybeta.alpha)
     try:

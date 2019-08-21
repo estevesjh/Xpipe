@@ -15,7 +15,6 @@ from ciao_contrib.runtool import *
 import pycrates                     # import crates ciao routines
 
 import sys, os
-import os.path as path
 import logging
 import time
 import subprocess
@@ -59,7 +58,7 @@ def E(z):
 
 def writeStringToFile(fileName, toBeWritten):
     # create file if it does not exist
-    if not path.isfile(fileName):
+    if not os.path.isfile(fileName):
         with open(fileName, 'w') as f:
             f.write( '{toBeWritten}\n'.format(toBeWritten=toBeWritten) )
     # else, append to file
@@ -70,7 +69,7 @@ def writeStringToFile(fileName, toBeWritten):
 def saveFinalOutput(fileName,values):
     
     values_str = values.split(',')
-    if not path.isfile(fileName):
+    if not os.path.isfile(fileName):
         header = '# Name, Xra, Xdec, kT, r500, M500, Mg500'
         writeStringToFile(fileName,header)
         writeStringToFile(fileName,values_str)
@@ -106,7 +105,7 @@ def checkOutput(fileName,check):
 def saveOutput(names,values,out='output.txt'):
     '''Save an ouptut name value into a section in the output file
     '''
-    if not path.isfile(out):
+    if not os.path.isfile(out):
        new_data = Table()
        for col,val in zip(names,values):
            new_data[col] = [val]
@@ -116,7 +115,6 @@ def saveOutput(names,values,out='output.txt'):
         
         ## if columns does not exists
         notCommonCols = [element for element in names if element in old_cols]
-        print(notCommonCols)
         if len(notCommonCols)>0:
             new_data.add_row(new_data[-1])
             for col,val in zip(names,values):
@@ -135,7 +133,7 @@ def saveOutput(names,values,out='output.txt'):
 
 def saveBeta(pars,out,model='modBeta'):
     pars_str = ' '.join(str(round(pars[i],5)) for i in range(len(pars)))
-    if not path.isfile(out):
+    if not os.path.isfile(out):
         with open(out, 'w') as f:
             f.write('#This file is the ouput of the beta sb profile fit \n')
             f.write('#The first line is the best fit \n')
@@ -163,7 +161,7 @@ def checkDirs(dirList):
     idx = np.empty(0,dtype=int)
     for i in range(len(dirList)):
         Dir = dirList[i]
-        if path.exists(Dir):
+        if os.path.exists(Dir):
             idx = np.appsaveBetaend(i,idx)
     return idx
 
@@ -192,17 +190,17 @@ def checkObsid(obsid):
         pass
 
 def checkImg(img):
-    if not path.isfile(img):
+    if not os.path.isfile(img):
         logging.critical('Image file was not found:{}.'.format(img))
         exit()
     else:
         pass
 
 def getDir(name,path):
-    nameDir = path.join(path,name)
-    if not path.exists(nameDir):
+    nameDir = os.path.join(path,name)
+    if not os.path.exists(nameDir):
         os.makedirs(nameDir)
-    nameDir = path.relpath(nameDir)
+    nameDir = os.path.relpath(nameDir)
     return nameDir
 
 def anel(x0,y0,r0,rphy,step,region):
@@ -220,7 +218,7 @@ def abertura(x0,y0,rphy,region):
 def makePlotBeta(infile,betapars,name,rbkg=0,model='modBeta',outdir='./'):
     '''Given a radial profile file and the model parameters it plots the electronic profile
     '''
-    dirname = path.dirname(infile)
+    dirname = os.path.dirname(infile)
     rprof = pycrates.read_file(infile)
     
     r = pycrates.copy_colvals(rprof,"R")
@@ -280,7 +278,7 @@ def doPlotModel(r,y_obs,y_model,y_obs_err=None,name='',rbkg=0,label=r'adapted-$\
     f.subplots_adjust(hspace=0)
     plt.setp([a.get_xticklabels() for a in f.axes[:-1]], visible=False)
 
-    nome_fig= path.join(outdir,name+'_sb.png')
+    nome_fig= os.path.join(outdir,name+'_sb.png')
     plt.savefig(nome_fig)
 
 def scaleRelation(Yx,redshift):
@@ -337,10 +335,10 @@ def computeCsb(r500vec,betapars,model='modBeta'):
     return csb
 
 def center(img,x0,y0,rphy):
-    dirname = path.dirname(img)
-    region = path.join(dirname,"aper.reg")
-    toto = path.join(dirname,"toto.fits")
-    totog = path.join(dirname,"totog.fits")
+    dirname = os.path.dirname(img)
+    region = os.path.join(dirname,"aper.reg")
+    toto = os.path.join(dirname,"toto.fits")
+    totog = os.path.join(dirname,"totog.fits")
     
     # Extaindo imagem dentro do círculo
     abertura(x0,y0,rphy,region)
@@ -395,15 +393,15 @@ def noise(infits,outimage,mask=None):
 def getNoiseImages(img,N=20,mask=None,pointSource=None,outdir='./noise/'):
     ''' it produces N images with a poissonian noise'''
     for i in range(1,N+1):
-        img_noise = path.join(outdir,"sb_%03i.img"%(i))
-        if not path.isfile(img_noise):
+        img_noise = os.path.join(outdir,"sb_%03i.img"%(i))
+        if not os.path.isfile(img_noise):
             noise(img,img_noise,mask=mask)
     
     if pointSource is not None:
         for i in range(1,N+1):
-            img_mask = path.join(outdir,"sb_%03i_mask.img"%(i))
-            img_noise = path.join(outdir,"sb_%03i.img"%(i))
-            if not path.isfile(img_mask):
+            img_mask = os.path.join(outdir,"sb_%03i_mask.img"%(i))
+            img_noise = os.path.join(outdir,"sb_%03i.img"%(i))
+            if not os.path.isfile(img_mask):
                 dmcopy(img_noise+"[exclude sky=region(%s)]"%(pointSource),img_mask,clobber=True)
 
 
@@ -414,6 +412,8 @@ def getNoiseImages(img,N=20,mask=None,pointSource=None,outdir='./noise/'):
 def fitSB(rprof_file,model='modBeta',name='Abell',outdir='./',par0=None):
     '''It fits a SB density profile. There are 3 model.
     model=['Beta','doubleBeta','modBeta']
+
+    To Do : doubleBeta
     '''
     # fitDir = getdata(outdir,'fit')
     if model=='Beta':    
@@ -441,14 +441,14 @@ def fitTemperatureX(obsid_lis,z,center,radius=500,name='source',outdir='./',data
     # core=False
 
     ## Input files
-    evt_mask_lis = [path.join(dataDownPath,'{}'.format(obsid),'repro',"{}_evt_gti_mask.fits".format(obsid)) for obsid in obsid_lis]
-    # blk_evt_lis = [path.join(outdir,"img","{}_blank.evt".format(obsid)) for obsid in obsid_lis]
-    blk_evt_lis = [path.join(outdir,"{}_blank.evt".format(obsid)) for obsid in obsid_lis]
+    evt_mask_lis = [os.path.join(dataDownPath,'{}'.format(obsid),'repro',"{}_evt_gti_mask.fits".format(obsid)) for obsid in obsid_lis]
+    # blk_evt_lis = [os.path.join(outdir,"img","{}_blank.evt".format(obsid)) for obsid in obsid_lis]
+    blk_evt_lis = [os.path.join(outdir,'img',"{}_blank.evt".format(obsid)) for obsid in obsid_lis]
 
     ## Output files
-    phafile = path.join(specroot,'%s_src.pi'%(name))
-    spec_out = path.join(specroot,'spec.txt')   ## output fit
-    core_vec = [path.join(specroot,"%s_core.reg"%(obsid)) for obsid in obsid_lis] ## region files
+    phafile = os.path.join(specroot,'%s_src.pi'%(name))
+    spec_out = os.path.join(specroot,'spec.txt')   ## output fit
+    core_vec = [os.path.join(specroot,"%s_core.reg"%(obsid)) for obsid in obsid_lis] ## region files
 
     for i in range(nObs):
         dmcoords(evt_mask_lis[i], asol="non", option="cel", ra=Xra, dec=Xdec, verbose=1)
@@ -461,8 +461,8 @@ def fitTemperatureX(obsid_lis,z,center,radius=500,name='source',outdir='./',data
         # abertura(xobs,yobs,rphy+1,core_vec[i])
         fit.kT_prep(obsid_lis[i],evt_mask_lis[i],blk_evt_lis[i],core_vec[i],specroot)
 
-    spec_lis = ','.join( path.join(specroot,'%s.pi'%(obsid)) for obsid in obsid_lis )
-    combine_spectra(src_spectra=spec_lis,outroot=path.join(specroot,"%s"%(name)),bscale_method='asca',clobber=True)
+    spec_lis = ','.join( os.path.join(specroot,'%s.pi'%(obsid)) for obsid in obsid_lis )
+    combine_spectra(src_spectra=spec_lis,outroot=os.path.join(specroot,"%s"%(name)),bscale_method='asca',clobber=True)
     dmhedit(infile=phafile, filelist="", operation='add', key='ANCRFILE', value='%s_src.arf'%(name))
     dmhedit(infile=phafile, filelist="", operation='add', key='RESPFILE', value='%s_src.rmf'%(name))
 
@@ -482,11 +482,11 @@ def massX(obsid_lis,z,center,radial_profile,kT_0=5,r0=500,rbkg=1000,model='modBe
     # outDir = getDir(outdir,'output')
     outDir = outdir
     currentPath = os.getcwd()
-    dirCheck = path.join(currentPath,'check')
+    dirCheck = os.path.join(currentPath,'check')
     sb_plot_dir = getDir('sb',dirCheck)
     
     ## output sb parameters
-    out = path.join(outDir,'{}.txt'.format(model))
+    out = os.path.join(outDir,'{}.txt'.format(model))
 
     DA = AngularDistance(z)     # em kpc
     ARCSEC2kpc = ( (1/3600)*DEG2RAD )*1000*DA      # kpc/arcsec
@@ -501,13 +501,12 @@ def massX(obsid_lis,z,center,radial_profile,kT_0=5,r0=500,rbkg=1000,model='modBe
     rprof = radial_profile.split('.fits')[0]+'_cut.fits'
     dmcopy(radial_profile+'[rmid<=%.2f]'%(rbkg),rprof,clobber=True)
     
-    # rprof = radial_profile
     if model=='Beta':    
         betapars = fitSB(rprof,model=model,name=name,outdir=outDir)
         saveBeta(betapars,out,model=model)
     if model=='modBeta':
         rc0,beta0,n0,bkg0,chisqr0 = fit.fitBeta(radial_profile)
-        rs0,alpha0,epsilon0,gamma0 = r1000phy,0.1,2.,3.
+        rs0,alpha0,epsilon0,gamma0 = 2*r1000phy,0.1,2.,3.
         
         par0 = [rc0,rs0,alpha0,beta0,epsilon0,gamma0,n0,1e-5]
         # betapars = fitSB(rprof,model=model,name=name,outdir=outDir,par0=par0)
@@ -557,7 +556,7 @@ def massX(obsid_lis,z,center,radial_profile,kT_0=5,r0=500,rbkg=1000,model='modBe
         if conv<1.0:
             break
     
-    output = path.join(outdir,'log.txt')
+    output = os.path.join(outdir,'log.txt')
         
     cols = ['kT','R500','Mg500','M500','n0']
     values = [kT,r500,Mg500,M500,n0]
@@ -582,7 +581,7 @@ def csb(betapars,r500,z,outdir='./'):
     
     csb = computeCsb(r500vec,betapars,model='modBeta')
 
-    output = path.join(outdir,'log.txt')
+    output = os.path.join(outdir,'log.txt')
     saveOutput(['csb'],[csb],out=output)
 
     # saveOutput('csb',csb,out=output)
@@ -599,7 +598,7 @@ def centroidShift(img,center_peak,r500,rmax,z,outdir='./'):
     xpeak, ypeak = getCenter(img,center_peak,unitsInput='deg',units='physical')
 
     ## Excluindo região central dentro de 30kpc
-    core = path.join(noiseroot,'core.reg')
+    core = os.path.join(noiseroot,'core.reg')
     abertura(xpeak, ypeak, r30kpc, core)
     
     ## Check noise images
@@ -611,7 +610,7 @@ def centroidShift(img,center_peak,r500,rmax,z,outdir='./'):
     rt = np.min([r500phy,rmax])
     
     for i in range(1,N+1):
-        noisei = path.join(noiseroot,"sb_%03i.img"%(i))
+        noisei = os.path.join(noiseroot,"sb_%03i.img"%(i))
         res = centroid_shift(noisei,xpeak,ypeak,rt)
         w.append(res)
 
@@ -619,7 +618,7 @@ def centroidShift(img,center_peak,r500,rmax,z,outdir='./'):
     werr = np.std(np.array(w))
     print("<w>, w_err : ( %.3f +/- %.3f )1e-3"%(wvalue, werr))
 
-    output = path.join(outdir,'log.txt')
+    output = os.path.join(outdir,'log.txt')
     saveOutput(['w','werr'],[wvalue,werr],out=output)
 
     return wvalue,werr
@@ -639,13 +638,13 @@ def errorCenterX(img,center,psreg,z,radius=500,outdir='./'):
     xpeak,ypeak= preAnalysis.findXrayPeak(img,xcen,ycen,rphy)   ## Find the center at the given radius
 
     ## Check noise images
-    N=100
+    N=20
     getNoiseImages(img,N=N,pointSource=psreg,outdir=noiseroot)
     
     position = []
     position2 = []
     for i in range(1,N+1):
-        img_mask = path.join(noiseroot,"sb_%03i_mask.img"%(i))
+        img_mask = os.path.join(noiseroot,"sb_%03i_mask.img"%(i))
         res = preAnalysis.findCentroX(img_mask,xcen,ycen,rphy)
         res2 = preAnalysis.findXrayPeak(img_mask,xcen,ycen,rphy,rSigma=r10kpc)
         position.append(res)
@@ -661,17 +660,17 @@ def errorCenterX(img,center,psreg,z,radius=500,outdir='./'):
     # std_cen = ARCSEC_kpc*(np.std(position[:,0])**2+np.std(position[:,1])**2)**(1/2)
     # std_peak = ARCSEC_kpc*(np.std(position[:,2])**2+np.std(position[:,3])**2)**(1/2)
 
-    img_mask = path.splitext(img)[0]+'_mask'+path.splitext(img)[1]
+    img_mask = os.path.splitext(img)[0]+'_mask'+os.path.splitext(img)[1]
     Xra, Xdec = getCenter(img_mask,[xcen,ycen],unitsInput='physical',units='deg')
     Xra_peak, Xdec_peak = getCenter(img_mask,[xpeak,ypeak],unitsInput='physical',units='deg')
     
     ## Save output
-    output = path.join(outdir,'log.txt')
+    output = os.path.join(outdir,'log.txt')
 
     hdr = 'xcen,ycen,xpeak,ypeak'
-    np.savetxt(path.join(outdir,'center_peak.txt'),position,header=hdr,fmt='%4f')
-    # np.savetxt(path.join(outdir,'center.txt'),position,fmt='%4f')
-    # np.savetxt(path.join(outdir,'xpeak.txt'),position2,fmt='%4f')
+    np.savetxt(os.path.join(outdir,'center_peak.txt'),position,header=hdr,fmt='%4f')
+    # np.savetxt(os.path.join(outdir,'center.txt'),position,fmt='%4f')
+    # np.savetxt(os.path.join(outdir,'xpeak.txt'),position2,fmt='%4f')
     
     saveOutput(['errorCenter'],[std_cen],out=output)
 
@@ -685,7 +684,7 @@ if __name__ == '__main__':
 
 
 # def doPlotBetaM(infile,pars,rbkg=100,name='RM'):
-#     dirname = path.dirname(infile)
+#     dirname = os.path.dirname(infile)
 #     rprof = read_file(infile)
     
 #     # make_figure(infile+"[cols r,CEL_BRI]","histogram")
@@ -721,5 +720,5 @@ if __name__ == '__main__':
 #     set_plot(["title.size",20])
 #     opts = { "clobber": True, "fittopage": True }
 #     opts['pagesize'] = 'letter'
-#     print_window(path.join(dirname,"%s.pdf"%(name)),opts)
+#     print_window(os.path.join(dirname,"%s.pdf"%(name)),opts)
 #     clear_plot()
