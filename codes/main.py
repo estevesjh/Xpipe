@@ -16,7 +16,7 @@ import Analysis
 import getCat
 
 def getConfig(section, item, boolean=False,
-		userConfigFile="./Xpipe_Config.ini"):
+		userConfigFile="/home/johnny/Documents/Xpipe/Xpipe_Config.ini"):
 
 	configFile = ConfigParser.ConfigParser()
 	configFile.read(userConfigFile)
