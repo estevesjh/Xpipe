@@ -23,6 +23,7 @@ To install the depedencies, take a look at (https://cxc.harvard.edu/ciao/scripti
 
 The script is config file base. In order to run the code, setup the `./Xpipe_Config.ini` file. 
 
+
 Section `[paths]`: there are two paths, one to storage the X-ray Chandra data files and the other is for the outputs. 
 Section `[Files]`: the input catalog
 Section `[Columns]`: set the columns names.
@@ -30,6 +31,8 @@ Section `[Columns]`: set the columns names.
 Section `[Mode]`: choose the steps to run the code. It is bolean `True` or `False`.
 
 If `[parallel]`, you might choose the number of cores and the number of jobs per time. The `batchStart` and `batchMax` parameters are integers values that are used as index in the input catalog.
+
+In the file `codes/main.py` go to line 17 and change the header of the function getConfig. In the userConfigFile variable put the whole path of the `./Xpipe_Config.ini` file.
 
 ### Run the code
 After all the steps above, you just run:
